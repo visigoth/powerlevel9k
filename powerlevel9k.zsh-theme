@@ -1519,6 +1519,29 @@ prompt_todo() {
 ################################################################
 # VCS segment: shows the state of your repository, if you are in a folder under
 # version control
+# vcs_info wrapper for the async worker
+_vbe_vcs_info() {
+    cd -q $1
+    vcs_info
+    print -l "${vcs_info_msg_0_}" "$VCS_WORKDIR_DIRTY" "$VCS_WORKDIR_HALF_DIRTY"
+}
+
+# Callback when complete
+_vbe_vcs_info_done() {
+    # Capture output and force the prompt to redraw
+    local stdout=$3
+    results=("${(@f)stdout}")
+
+    vcs_info_msg_0_=$results[1]
+    VCS_WORKDIR_DIRTY=$results[2]
+    VCS_WORKDIR_HALF_DIRTY=$results[3]
+    zle reset-prompt
+}
+
+powerlevel9k_async_vcs_info() {
+    async_job vcs_info _vbe_vcs_info $PWD
+}
+
 set_default POWERLEVEL9K_VCS_ACTIONFORMAT_FOREGROUND "red"
 # Default: Just display the first 8 characters of our changeset-ID.
 set_default POWERLEVEL9K_VCS_INTERNAL_HASH_LENGTH "8"
@@ -1580,17 +1603,21 @@ powerlevel9k_vcs_init() {
   if [[ "$POWERLEVEL9K_SHOW_CHANGESET" == true ]]; then
     zstyle ':vcs_info:*' get-revision true
   fi
+
+  # Async wrapper for _vbe_vcs_info
+  async_init
+  async_start_worker vcs_info
+  async_register_callback vcs_info _vbe_vcs_info_done
+
+  add-zsh-hook precmd powerlevel9k_async_vcs_info
 }
 
 ################################################################
 # Segment to show VCS information
 prompt_vcs() {
-  VCS_WORKDIR_DIRTY=false
-  VCS_WORKDIR_HALF_DIRTY=false
   local current_state=""
 
   # Actually invoke vcs_info manually to gather all information.
-  vcs_info
   local vcs_prompt="${vcs_info_msg_0_}"
 
   if [[ -n "$vcs_prompt" ]]; then
